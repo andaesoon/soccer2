@@ -106,6 +106,13 @@
                 return;
             }
 
+            // API 키가 비어있는지 확인하고 사용자에게 안내
+            const currentApiKey = "AIzaSyCGI_O6mdCd-_1fmKQwuxG2E52GdDlAKE8";
+            if (currentApiKey === "") {
+                status.textContent = '오류: API 키가 입력되지 않았습니다. 코드에서 apiKey 변수에 새 키를 입력해주세요.';
+                return;
+            }
+
             status.textContent = '이미지 분석 중... 잠시만 기다려 주세요.';
             const playerList = document.getElementById('playerList');
             playerList.innerHTML = '<p class="text-gray-400">이미지를 분석하고 있습니다...</p>';
@@ -114,6 +121,7 @@
                 const base64ImageData = await fileToBase64(file);
                 
                 // Construct the prompt for the Gemini API
+                // API가 쉼표로 구분된 이름 목록만 반환하도록 명확히 지시합니다.
                 const prompt = "Please identify and list the names of the people from the image. Respond with a comma-separated list of names only, for example: 'Anderson, 국주, 김남혁'. Do not include any other text or explanation.";
                 
                 const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
@@ -132,8 +140,14 @@
                     }],
                 };
 
-                const apiKey = "AIzaSyCWpt1uxNSdV2B_QKV5B1G7Vd6osT3xCIc";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+                // --- 중요 ---
+                // 이전 API 키가 유출로 인해 차단되었습니다.
+                // Google AI Studio에서 새로 발급받은 **유효한 API 키**를 따옴표 안에 붙여넣어 주십시오.
+                const apiKey = currentApiKey; 
+                // ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -143,29 +157,42 @@
                 
                 const result = await response.json();
                 
+                let text = '';
                 if (result.candidates && result.candidates.length > 0 &&
                     result.candidates[0].content && result.candidates[0].content.parts &&
                     result.candidates[0].content.parts.length > 0) {
                     
-                    const text = result.candidates[0].content.parts[0].text;
-                    const names = text.split(',').map(name => name.trim()).filter(name => name);
+                    text = result.candidates[0].content.parts[0].text;
+                }
+                
+                if (text) {
+                    // 응답 텍스트 정리 및 안전하게 이름 추출
+                    // 1. 큰따옴표, 백틱 등 불필요한 기호를 제거
+                    let cleanedText = text.replace(/["`]/g, '').trim(); 
                     
-                    allPlayers = [...new Set(names)]; // Remove duplicates
+                    // 2. 쉼표나 개행 문자를 기준으로 분리하고, 공백 제거 후 비어있지 않은 요소만 필터링
+                    const names = cleanedText.split(/[\n,]/) 
+                                             .map(name => name.trim())
+                                             .filter(name => name.length > 0);
+                    
+                    allPlayers = [...new Set(names)]; // 중복 제거
                     
                     if (allPlayers.length > 0) {
                         status.textContent = `${allPlayers.length}명의 인원을 파악했습니다.`;
                         renderPlayers();
                     } else {
-                        status.textContent = '이미지에서 이름을 찾을 수 없습니다.';
+                        status.textContent = '이미지에서 이름을 찾을 수 없거나, 추출된 이름이 없습니다. (0명 파악)';
                         playerList.innerHTML = '<p class="text-gray-400">이름을 찾을 수 없습니다. 다른 이미지를 사용해 보세요.</p>';
                     }
                 } else {
-                    status.textContent = '이미지 분석에 실패했습니다. 응답 형식이 올바르지 않습니다.';
-                    console.error('API response error:', result);
+                    // API 응답 구조는 정상이나, 추출된 텍스트가 비어있거나 예상치 못한 오류가 발생한 경우
+                    status.textContent = '이미지 분석에 실패했습니다. (API 응답 텍스트 없음)';
+                    console.error('API response error or empty text:', result);
                 }
 
             } catch (error) {
-                status.textContent = `통신 오류: ${error.message}`;
+                // 네트워크 오류, 할당량 초과 등 통신 자체에 문제 발생 시
+                status.textContent = `통신 오류: ${error.message}. API 키나 할당량을 확인해주세요.`;
                 console.error('Fetch error:', error);
             }
         }
@@ -190,7 +217,7 @@
                 // 삭제 버튼 추가
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = 'X';
-                deleteButton.classList.add('text-xs', 'font-bold', 'text-gray-500', 'hover:text-red-600');
+                deleteButton.classList.add('text-xs', 'font-bold', 'text-gray-500', 'hover:text-red-600', 'ml-1'); // ml-1 추가
                 deleteButton.onclick = (e) => {
                     e.stopPropagation(); // Stop propagation to prevent selecting the player
                     deletePlayer(player);
